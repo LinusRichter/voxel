@@ -32,15 +32,16 @@ async function initWasm() {
   result = await WebAssembly.instantiate(bytes, {
     env: {
       writeToCanvas: (ptr) => {
+        console.log("JS: " + new Date().toLocaleTimeString());
         const memory = result.instance.exports.memory.buffer;
         const array = new Uint8ClampedArray(memory, ptr, width * height * 4);
         const canvas = document.getElementById("canvas");
         const context = canvas.getContext("2d");
 
         context.putImageData(new ImageData(array, width, height), 0, 0);
-        console.log("finished");
+        console.log("JS: finished" + new Date().toLocaleTimeString());
       },
-      print: (s) => console.log("WASM: " + s),
+      print: (s) => console.log("WASM: " + new Date().toLocaleTimeString() + s),
       printColor: (r, g, b) => console.log(`WASM-COLOR: rgb(${r},${g},${b})`),
     },
   });

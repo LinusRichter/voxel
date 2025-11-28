@@ -23,6 +23,8 @@ export fn computeCanvas(
         buffer_op = allocator.alloc(u8, buffer_len) catch return;
     }
 
+    print(1);
+
     if (buffer_op) |buffer| {
         const px: f32 = color_map_width / 2.0 - 50;
         const py: f32 = color_map_height / 2.0;
@@ -65,7 +67,9 @@ export fn computeCanvas(
                 }
             }
         }
+        print(2);
         writeToCanvas(buffer.ptr);
+        print(3);
     }
 }
 
