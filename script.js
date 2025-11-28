@@ -1,32 +1,74 @@
 document.addEventListener("DOMContentLoaded", start);
+document.addEventListener("keydown", inputs);
 
 let wasm;
-let width = 0;
-let height = 0;
+let isRendering = false;
 
 let heightMapData;
 let colorMapData;
 
+let px = 0;
+let py = 0;
+
 async function start() {
   await initWasm();
-  window.addEventListener("resize", handleResize);
 
   if (!colorMapData) {
-    colorMapData = await prepareImage("./images/C1.png");
-  }
-  if (!heightMapData) {
-    heightMapData = await prepareImage("./images/D1.png");
+    colorMapData = await prepareImage("./images/C15.png");
   }
 
-  handleResize();
+  if (!heightMapData) {
+    heightMapData = await prepareImage("./images/D15.png");
+  }
+
+  requestAnimationFrame(runGame);
 }
 
-function render() {
-  const computeCanvas = wasm.instance.exports.computeCanvas;
+function inputs(e) {
+  if (e.key == "w") {
+    py -= 5;
+  }
 
-  computeCanvas(
-    width,
-    height,
+  if (e.key == "s") {
+    py += 5;
+  }
+
+  if (e.key == "a") {
+    px -= 5;
+  }
+
+  if (e.key == "d") {
+    px += 5;
+  }
+}
+
+let prevTimestamp = 0;
+function runGame(timestamp) {
+  const canvasElem = document.getElementById("canvas");
+
+  document.getElementById("fps").innerText = `${(
+    Math.round((1000.0 / (timestamp - prevTimestamp)) * 100) / 100
+  ).toFixed(2)} FPS`;
+
+  prevTimestamp = timestamp;
+
+  while (isRendering) {}
+
+  if (
+    canvasElem.width != canvasElem.clientWidth ||
+    canvasElem.height != canvasElem.clientHeight
+  ) {
+    canvasElem.width = canvasElem.clientWidth;
+    canvasElem.height = canvasElem.clientHeight;
+  }
+
+  isRendering = true;
+
+  wasm.instance.exports.computeCanvas(
+    px,
+    py,
+    canvasElem.width,
+    canvasElem.height,
     colorMapData.ptr,
     colorMapData.width,
     colorMapData.height,
@@ -34,35 +76,37 @@ function render() {
     heightMapData.width,
     heightMapData.height,
   );
-}
 
-async function handleResize() {
-  const canvas = document.getElementById("canvas");
-  width = canvas.clientWidth;
-  height = canvas.clientHeight;
-  canvas.width = width;
-  canvas.height = height;
-  render();
+  requestAnimationFrame(runGame);
 }
 
 async function initWasm() {
   const response = await fetch("./zig/zig-out/bin/code.wasm");
   const bytes = await response.arrayBuffer();
+  const canvas = document.getElementById("canvas");
+  const context = canvas.getContext("2d");
 
   wasm = await WebAssembly.instantiate(bytes, {
     env: {
       writeToCanvas: (ptr) => {
-        console.log("JS: " + new Date().toLocaleTimeString());
-        const memory = wasm.instance.exports.memory.buffer;
-        const array = new Uint8ClampedArray(memory, ptr, width * height * 4);
-        const canvas = document.getElementById("canvas");
-        const context = canvas.getContext("2d");
+        const array = new Uint8ClampedArray(
+          wasm.instance.exports.memory.buffer,
+          ptr,
+          canvas.width * canvas.height * 4,
+        );
 
-        context.putImageData(new ImageData(array, width, height), 0, 0);
-        console.log("JS: finished" + new Date().toLocaleTimeString());
+        context.putImageData(
+          new ImageData(array, canvas.width, canvas.height),
+          0,
+          0,
+        );
+
+        isRendering = false;
       },
+
       print: (s) =>
         console.log("WASM: " + new Date().toLocaleTimeString() + " " + s),
+
       printColor: (r, g, b) => console.log(`WASM-COLOR: rgb(${r},${g},${b})`),
     },
   });
@@ -74,8 +118,6 @@ function prepareImage(path) {
       console.log("result not loaded");
       reject();
     }
-
-    const allocImageBuffer = wasm.instance.exports.allocImageBuffer;
 
     const img = new Image();
     img.src = path;
@@ -93,7 +135,7 @@ function prepareImage(path) {
       );
       const bytes = imgData.data;
 
-      const ptr = allocImageBuffer(bytes.length);
+      const ptr = wasm.instance.exports.allocImageBuffer(bytes.length);
       new Uint8Array(
         wasm.instance.exports.memory.buffer,
         ptr,
