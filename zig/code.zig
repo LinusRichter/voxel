@@ -2,7 +2,8 @@ extern fn writeToCanvas([*]const u8) void;
 extern fn print(f32) void;
 extern fn printColor(u8, u8, u8) void;
 
-var allocator = @import("std").heap.wasm_allocator;
+const std = @import("std");
+var allocator = std.heap.wasm_allocator;
 
 var buffer_op: ?[]u8 = null;
 
@@ -23,14 +24,14 @@ export fn computeCanvas(
     }
 
     if (buffer_op) |buffer| {
-        const px: f32 = color_map_width / 2.0;
-        //const px = 250.0;
+        const px: f32 = color_map_width / 2.0 - 50;
         const py: f32 = color_map_height / 2.0;
-        //const py = 80.0;
         const d_max: f32 = 300.0;
-        const fov: f32 = 2.0;
+        const camera_height: f32 = f(height_map_ptr[idx(px, py, color_map_width)]) + 10.0;
 
-        const focal_length = 120.0;
+        const fov: f32 = 90.0;
+        const fov_rad: f32 = std.math.degreesToRadians(fov);
+        const focal_length = (buffer_height / 2.0) * (1 / std.math.tan(fov_rad / 2.0));
 
         for (1..@intFromFloat(d_max)) |i_d| {
             const f_i_d: f32 = @floatFromInt(i_d);
@@ -39,7 +40,7 @@ export fn computeCanvas(
             const map_y = @floor(py - d);
             const map_y_mod = @mod(map_y, color_map_height);
 
-            const dx = d * fov;
+            const dx = d * (buffer_width / focal_length);
 
             for (0..@intFromFloat(buffer_width)) |x| {
                 const f_x: f32 = @floatFromInt(x);
@@ -50,16 +51,10 @@ export fn computeCanvas(
                 const index = idx(map_x_mod, map_y_mod, color_map_width);
                 const color_ptr = color_map_ptr + index;
 
-                //printColor(color_ptr[0], color_ptr[1], color_ptr[2]);
                 const height_map_value: f32 = @floatFromInt(height_map_ptr[index]);
 
-                //const percentage = height_map_value / 155.0;
-                //const height: u32 = @intFromFloat(buffer_height - buffer_height * percentage);
-                //_ = height;
-
-                var height_on_screen: f32 = (height_map_value + 100) / (focal_length * d);
-                height_on_screen = @min(height_on_screen, buffer_height - 1.0);
-                height_on_screen = @max(height_on_screen, 1);
+                var height_on_screen: f32 = (camera_height - height_map_value) * (focal_length / d) + 300.0;
+                height_on_screen = std.math.clamp(height_on_screen, 0.0, buffer_height - 1.0);
 
                 for (@intFromFloat(height_on_screen)..@intFromFloat(buffer_height)) |y| {
                     const f_y: f32 = @floatFromInt(y);
@@ -70,7 +65,6 @@ export fn computeCanvas(
                 }
             }
         }
-
         writeToCanvas(buffer.ptr);
     }
 }
