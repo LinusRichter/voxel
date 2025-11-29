@@ -9,18 +9,22 @@ var buffer_op: ?[]u8 = null;
 var max_y_buffer: []u32 = undefined;
 
 export fn computeCanvas(
+    px: f32, py: f32,
     buffer_width: f32, buffer_height: f32,
     color_map_ptr: [*]u8, color_map_width: f32, color_map_height: f32,
     height_map_ptr: [*]u8, height_map_width: f32, height_map_height: f32
 ) void {
     const buffer_len: u32 = @intFromFloat(buffer_width * buffer_height * 4.0);
 
+    const px_mod = @mod(px, color_map_width);
+    const py_mod = @mod(py, color_map_height);
+
     _ = height_map_width;
     _ = height_map_height;
 
     if (buffer_op) |buffer| {
-        _ = allocator.resize(buffer, buffer_len);
-        _ = allocator.resize(max_y_buffer, u(buffer_width));
+        buffer_op = allocator.realloc(buffer, buffer_len) catch return;
+        max_y_buffer = allocator.realloc(max_y_buffer, u(buffer_width)) catch return;
     } else {
         buffer_op = allocator.alloc(u8, buffer_len) catch return;
         max_y_buffer = allocator.alloc(u32, u(buffer_width)) catch return;
@@ -31,19 +35,14 @@ export fn computeCanvas(
             max_y_buffer[mxi] = u(buffer_height);
         }
 
-        //const px: f32 = color_map_width / 2.0 - 50;
-        //const py: f32 = color_map_height / 2.0;
-        const px = 230.0;
-        const py = 10.0;
-        //
-        const d_max: f32 = 450.0;
-        const camera_height: f32 = f(height_map_ptr[idx(px, py, color_map_width)]) + 50.0;
+        const render_distance: f32 = 450.0;
+        const camera_height: f32 = f(height_map_ptr[idx(px_mod, py_mod, color_map_width)]) + 50.0;
 
         const fov: f32 = 90.0;
         const fov_rad: f32 = std.math.degreesToRadians(fov);
         const focal_length = (buffer_height / 2.0) * (1 / std.math.tan(fov_rad / 2.0));
 
-        for (1..@intFromFloat(d_max)) |i_d| {
+        for (1..@intFromFloat(render_distance)) |i_d| {
             const d: f32 = @floatFromInt(i_d);
             const map_y = @floor(py - d);
             const map_y_mod = @mod(map_y, color_map_height);
@@ -74,7 +73,6 @@ export fn computeCanvas(
                     }
                     max_y_buffer[x] = u(height_on_screen);
                 }
-
             }
         }
 
@@ -87,9 +85,7 @@ export fn computeCanvas(
             }
         }
 
-        print(2);
         writeToCanvas(buffer.ptr);
-        print(3);
     }
 }
 
