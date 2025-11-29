@@ -2,6 +2,7 @@ document.addEventListener("DOMContentLoaded", start);
 document.addEventListener("keydown", inputs);
 
 let wasm;
+let context;
 let isRendering = false;
 
 let heightMapData;
@@ -11,7 +12,7 @@ let px = 0;
 let py = 0;
 
 async function start() {
-  await initWasm();
+  await init();
 
   if (!colorMapData) {
     colorMapData = await prepareImage("./images/C15.png");
@@ -64,7 +65,7 @@ function runGame(timestamp) {
 
   isRendering = true;
 
-  wasm.instance.exports.computeCanvas(
+  const ptr = wasm.instance.exports.computeCanvas(
     px,
     py,
     canvasElem.width,
@@ -77,33 +78,27 @@ function runGame(timestamp) {
     heightMapData.height,
   );
 
+  const array = new Uint8ClampedArray(
+    wasm.instance.exports.memory.buffer,
+    ptr,
+    canvas.width * canvas.height * 4,
+  );
+
+  context.putImageData(new ImageData(array, canvas.width, canvas.height), 0, 0);
+
+  isRendering = false;
+
   requestAnimationFrame(runGame);
 }
 
-async function initWasm() {
+async function init() {
   const response = await fetch("./zig/zig-out/bin/code.wasm");
   const bytes = await response.arrayBuffer();
   const canvas = document.getElementById("canvas");
-  const context = canvas.getContext("2d");
+  context = canvas.getContext("2d");
 
   wasm = await WebAssembly.instantiate(bytes, {
     env: {
-      writeToCanvas: (ptr) => {
-        const array = new Uint8ClampedArray(
-          wasm.instance.exports.memory.buffer,
-          ptr,
-          canvas.width * canvas.height * 4,
-        );
-
-        context.putImageData(
-          new ImageData(array, canvas.width, canvas.height),
-          0,
-          0,
-        );
-
-        isRendering = false;
-      },
-
       print: (s) =>
         console.log("WASM: " + new Date().toLocaleTimeString() + " " + s),
 

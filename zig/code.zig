@@ -1,4 +1,3 @@
-extern fn writeToCanvas([*]const u8) void;
 extern fn print(f32) void;
 extern fn printColor(u8, u8, u8) void;
 
@@ -13,7 +12,7 @@ export fn computeCanvas(
     buffer_width: f32, buffer_height: f32,
     color_map_ptr: [*]u8, color_map_width: f32, color_map_height: f32,
     height_map_ptr: [*]u8, height_map_width: f32, height_map_height: f32
-) void {
+) [*]u8 {
     const buffer_len: u32 = @intFromFloat(buffer_width * buffer_height * 4.0);
 
     const px_mod = @mod(px, color_map_width);
@@ -23,11 +22,11 @@ export fn computeCanvas(
     _ = height_map_height;
 
     if (buffer_op) |buffer| {
-        buffer_op = allocator.realloc(buffer, buffer_len) catch return;
-        max_y_buffer = allocator.realloc(max_y_buffer, u(buffer_width)) catch return;
+        buffer_op = allocator.realloc(buffer, buffer_len) catch unreachable;
+        max_y_buffer = allocator.realloc(max_y_buffer, u(buffer_width)) catch unreachable;
     } else {
-        buffer_op = allocator.alloc(u8, buffer_len) catch return;
-        max_y_buffer = allocator.alloc(u32, u(buffer_width)) catch return;
+        buffer_op = allocator.alloc(u8, buffer_len) catch unreachable;
+        max_y_buffer = allocator.alloc(u32, u(buffer_width)) catch unreachable;
     }
 
     if (buffer_op) |buffer| {
@@ -84,28 +83,28 @@ export fn computeCanvas(
                 buffer[idx(f(x), f(y), buffer_width) + 3] = 255;
             }
         }
-
-        writeToCanvas(buffer.ptr);
+        return buffer.ptr;
     }
+    unreachable;
 }
 
 export fn allocImageBuffer(size: u32) *u8 {
     return @ptrCast(allocator.alloc(u8, size) catch unreachable);
 }
 
-fn idx(x: f32, y: f32, width: f32) u32 {
+inline fn idx(x: f32, y: f32, width: f32) u32 {
     return @intFromFloat((y * width + x) * 4.0);
 }
 
-fn f(x: anytype) f32 {
+inline fn f(x: anytype) f32 {
     return @as(f32, @floatFromInt(x));
 }
 
-fn i(x: anytype) i32 {
+inline fn i(x: anytype) i32 {
     return @as(i32, @intFromFloat(x));
 }
 
-fn u(x: anytype) u32 {
+inline fn u(x: anytype) u32 {
     return @as(u32, @intFromFloat(x));
 }
 
