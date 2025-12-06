@@ -3,10 +3,8 @@ document.addEventListener("keydown", inputs);
 
 let wasm;
 let context;
-let isRendering = false;
 
-let heightMapData;
-let colorMapData;
+let mapPointer = null;
 
 let px = 0;
 let py = 0;
@@ -14,13 +12,7 @@ let py = 0;
 async function start() {
   await init();
 
-  if (!colorMapData) {
-    colorMapData = await prepareImage("./images/C15.png");
-  }
-
-  if (!heightMapData) {
-    heightMapData = await prepareImage("./images/D15.png");
-  }
+  await createMapPointer("./images/C15.png", "./images/D15.png");
 
   requestAnimationFrame(runGame);
 }
@@ -53,8 +45,6 @@ function runGame(timestamp) {
 
   prevTimestamp = timestamp;
 
-  while (isRendering) {}
-
   if (
     canvasElem.width != canvasElem.clientWidth ||
     canvasElem.height != canvasElem.clientHeight
@@ -63,30 +53,27 @@ function runGame(timestamp) {
     canvasElem.height = canvasElem.clientHeight;
   }
 
-  isRendering = true;
+  if (mapPointer) {
+    const ptr = wasm.instance.exports.computeCanvas(
+      px,
+      py,
+      canvasElem.width,
+      canvasElem.height,
+      mapPointer,
+    );
 
-  const ptr = wasm.instance.exports.computeCanvas(
-    px,
-    py,
-    canvasElem.width,
-    canvasElem.height,
-    colorMapData.ptr,
-    colorMapData.width,
-    colorMapData.height,
-    heightMapData.ptr,
-    heightMapData.width,
-    heightMapData.height,
-  );
+    const array = new Uint8ClampedArray(
+      wasm.instance.exports.memory.buffer,
+      ptr,
+      canvas.width * canvas.height * 4,
+    );
 
-  const array = new Uint8ClampedArray(
-    wasm.instance.exports.memory.buffer,
-    ptr,
-    canvas.width * canvas.height * 4,
-  );
-
-  context.putImageData(new ImageData(array, canvas.width, canvas.height), 0, 0);
-
-  isRendering = false;
+    context.putImageData(
+      new ImageData(array, canvas.width, canvas.height),
+      0,
+      0,
+    );
+  }
 
   requestAnimationFrame(runGame);
 }
@@ -144,4 +131,24 @@ function prepareImage(path) {
       reject(new Error("Failed to load image"));
     };
   });
+}
+
+async function createMapPointer(colorMapPath, heightMapPath) {
+  const colorMapData = await prepareImage(colorMapPath);
+  const heightMapData = await prepareImage(heightMapPath);
+
+  if (
+    colorMapData.width != heightMapData.width ||
+    colorMapData.height != heightMapData.height
+  ) {
+    console.log("different dimensions height-map and color-map");
+    return;
+  }
+
+  mapPointer = wasm.instance.exports.createMap(
+    colorMapData.width,
+    colorMapData.height,
+    colorMapData.ptr,
+    heightMapData.ptr,
+  );
 }

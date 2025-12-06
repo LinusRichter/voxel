@@ -2,6 +2,8 @@ extern fn print(f32) void;
 extern fn printColor(u8, u8, u8) void;
 
 const std = @import("std");
+
+const Map = @import("map.zig").Map;
 var allocator = std.heap.wasm_allocator;
 
 var buffer_op: ?[]u8 = null;
@@ -10,16 +12,12 @@ var max_y_buffer: []u32 = undefined;
 export fn computeCanvas(
     px: f32, py: f32,
     buffer_width: f32, buffer_height: f32,
-    color_map_ptr: [*]u8, color_map_width: f32, color_map_height: f32,
-    height_map_ptr: [*]u8, height_map_width: f32, height_map_height: f32
+    map: *Map
 ) [*]u8 {
     const buffer_len: u32 = @intFromFloat(buffer_width * buffer_height * 4.0);
 
-    const px_mod = @mod(px, color_map_width);
-    const py_mod = @mod(py, color_map_height);
-
-    _ = height_map_width;
-    _ = height_map_height;
+    const px_mod = @mod(px, map.width);
+    const py_mod = @mod(py, map.height);
 
     if (buffer_op) |buffer| {
         buffer_op = allocator.realloc(buffer, buffer_len) catch unreachable;
@@ -35,7 +33,7 @@ export fn computeCanvas(
         }
 
         const render_distance: f32 = 450.0;
-        const camera_height: f32 = f(height_map_ptr[idx(px_mod, py_mod, color_map_width)]) + 50.0;
+        const camera_height: f32 = f(map.height_map_ptr[idx(px_mod, py_mod, map.width)]) + 50.0;
 
         const fov: f32 = 90.0;
         const fov_rad: f32 = std.math.degreesToRadians(fov);
@@ -44,7 +42,7 @@ export fn computeCanvas(
         for (1..@intFromFloat(render_distance)) |i_d| {
             const d: f32 = @floatFromInt(i_d);
             const map_y = @floor(py - d);
-            const map_y_mod = @mod(map_y, color_map_height);
+            const map_y_mod = @mod(map_y, map.height);
 
             const dx = d * (buffer_width / focal_length);
 
@@ -52,12 +50,12 @@ export fn computeCanvas(
                 const f_x: f32 = @floatFromInt(x);
 
                 const map_x = @floor(px - (dx / 2.0) + f_x / buffer_width * dx);
-                const map_x_mod = @mod(map_x, color_map_width);
+                const map_x_mod = @mod(map_x, map.width);
 
-                const index = idx(map_x_mod, map_y_mod, color_map_width);
-                const color_ptr = color_map_ptr + index;
+                const index = idx(map_x_mod, map_y_mod, map.width);
+                const color_ptr = map.color_map_ptr + index;
 
-                const height_map_value: f32 = @floatFromInt(height_map_ptr[index]);
+                const height_map_value: f32 = @floatFromInt(map.height_map_ptr[index]);
 
                 var height_on_screen: f32 = (camera_height - height_map_value) * (focal_length / d) + 300.0;
                 height_on_screen = std.math.clamp(height_on_screen, 0.0, buffer_height - 1.0);
@@ -90,6 +88,21 @@ export fn computeCanvas(
 
 export fn allocImageBuffer(size: u32) *u8 {
     return @ptrCast(allocator.alloc(u8, size) catch unreachable);
+}
+
+export fn createMap(
+    width: f32,
+    height: f32,
+    color_map_ptr: [*]const u8,
+    height_map_ptr: [*]const u8
+) *Map {
+    return Map.init(
+        allocator,
+        width,
+        height,
+        color_map_ptr,
+        height_map_ptr
+    );
 }
 
 inline fn idx(x: f32, y: f32, width: f32) u32 {
